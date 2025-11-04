@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat UI - Messenger Style</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+        }
+
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .chat-header {
+            background-color: #0084ff;
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 16px;
+            border-bottom: 1px solid #e4e6ea;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 8px;
+            max-width: 70%;
+        }
+
+        .message.sent {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.received {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #e4e6ea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #1c1e21;
+            margin: 0 8px;
+            flex-shrink: 0;
+        }
+
+        .message-content {
+            background-color: #e4e6ea;
+            padding: 8px 12px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+            max-width: 100%;
+        }
+
+        .message.sent .message-content {
+            background-color: #0084ff;
+            color: white;
+        }
+
+        .message-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 12px;
+            color: #65676b;
+        }
+
+        .message-sender {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #8a8d91;
+        }
+
+        .message-text {
+            margin-bottom: 8px;
+        }
+
+        .message-attachment {
+            margin-top: 8px;
+        }
+
+        .message-attachment img,
+        .message-attachment video {
+            max-width: 100%;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        .message-attachment video {
+            max-height: 200px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #65676b;
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #d32f2f;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 100vh;
+                max-width: 100%;
+            }
+
+            .chat-messages {
+                padding: 12px;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            Chat với Thực Phẩm Noom
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="loading">Đang tải tin nhắn...</div>
+        </div>
+    </div>
+
+    <script src="chat-data.js"></script>
+    <script>
+        // Load chat data from embedded JavaScript
+        function loadChatData() {
+            try {
+                // Sort messages by created_time (oldest first)
+                const messages = [...chatData].sort((a, b) => new Date(a.created_time) - new Date(b.created_time));
+                return messages;
+            } catch (error) {
+                console.error('Lỗi khi tải dữ liệu:', error);
+                throw error;
+            }
+        }
+
+        // Format timestamp to readable format
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+                // Today - show time only
+                return date.toLocaleTimeString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } else if (diffDays === 1) {
+                // Yesterday
+                return 'Hôm qua ' + date.toLocaleTimeString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } else if (diffDays < 7) {
+                // Within this week
+                const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+                return days[date.getDay()] + ' ' + date.toLocaleTimeString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } else {
+                // Older dates
+                return date.toLocaleDateString('vi-VN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+        }
+
+        // Get avatar initial from name
+        function getAvatarInitial(name) {
+            return name.charAt(0).toUpperCase();
+        }
+
+        // Create message element
+        function createMessageElement(message, isSent) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+
+            // Avatar
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            avatarDiv.textContent = getAvatarInitial(message.from.name);
+
+            // Message content
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            // Message info (sender and time)
+            if (!isSent) {
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'message-info';
+
+                const senderSpan = document.createElement('span');
+                senderSpan.className = 'message-sender';
+                senderSpan.textContent = message.from.name;
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'message-time';
+                timeSpan.textContent = formatTimestamp(message.created_time);
+
+                infoDiv.appendChild(senderSpan);
+                infoDiv.appendChild(timeSpan);
+                contentDiv.appendChild(infoDiv);
+            }
+
+            // Message text (if exists)
+            if (message.message && message.message.trim()) {
+                const textDiv = document.createElement('div');
+                textDiv.className = 'message-text';
+                textDiv.textContent = message.message;
+                contentDiv.appendChild(textDiv);
+            }
+
+            // Attachments (images/videos)
+            if (message.attachments && message.attachments.data && message.attachments.data.length > 0) {
+                const attachmentDiv = document.createElement('div');
+                attachmentDiv.className = 'message-attachment';
+
+                message.attachments.data.forEach(attachment => {
+                    if (attachment.image_data) {
+                        // Image attachment
+                        const img = document.createElement('img');
+                        img.src = attachment.image_data.url;
+                        img.alt = attachment.name || 'Hình ảnh';
+                        img.loading = 'lazy';
+                        img.onclick = () => window.open(attachment.image_data.url, '_blank');
+                        attachmentDiv.appendChild(img);
+                    } else if (attachment.video_data) {
+                        // Video attachment
+                        const video = document.createElement('video');
+                        video.src = attachment.video_data.url;
+                        video.controls = true;
+                        video.preload = 'metadata';
+                        video.style.maxHeight = '200px';
+                        attachmentDiv.appendChild(video);
+                    }
+                });
+
+                contentDiv.appendChild(attachmentDiv);
+            }
+
+            // Add time for sent messages
+            if (isSent) {
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'message-time';
+                timeDiv.style.textAlign = 'right';
+                timeDiv.style.marginTop = '4px';
+                timeDiv.style.fontSize = '11px';
+                timeDiv.style.color = '#8a8d91';
+                timeDiv.textContent = formatTimestamp(message.created_time);
+                contentDiv.appendChild(timeDiv);
+            }
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+
+            return messageDiv;
+        }
+
+        // Render chat messages
+        function renderChat(messages) {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = '';
+
+            // Group messages by sender for better UX
+            let currentSender = null;
+            let messageGroup = [];
+
+            messages.forEach((message, index) => {
+                const senderId = message.from.id;
+                const isSent = senderId === '502594027149995'; // Noom's ID
+
+                if (senderId !== currentSender) {
+                    // Render previous group if exists
+                    if (messageGroup.length > 0) {
+                        messageGroup.forEach(groupMsg => {
+                            const isGroupSent = groupMsg.from.id === '502594027149995';
+                            chatMessages.appendChild(createMessageElement(groupMsg, isGroupSent));
+                        });
+                    }
+
+                    // Start new group
+                    currentSender = senderId;
+                    messageGroup = [message];
+                } else {
+                    messageGroup.push(message);
+                }
+
+                // Render last group
+                if (index === messages.length - 1 && messageGroup.length > 0) {
+                    messageGroup.forEach(groupMsg => {
+                        const isGroupSent = groupMsg.from.id === '502594027149995';
+                        chatMessages.appendChild(createMessageElement(groupMsg, isGroupSent));
+                    });
+                }
+            });
+
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Initialize chat
+        function initChat() {
+            try {
+                const messages = loadChatData();
+                renderChat(messages);
+            } catch (error) {
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.innerHTML = '<div class="error">Không thể tải dữ liệu chat. Vui lòng kiểm tra file chat-data.js</div>';
+                console.error(error);
+            }
+        }
+
+        // Load chat when page loads
+        document.addEventListener('DOMContentLoaded', initChat);
+    </script>
+</body>
+</html>
